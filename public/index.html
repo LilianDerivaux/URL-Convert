@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URL Convert</title>
+<meta name="description" content="Encoder, décoder, analyser et nettoyer des URL directement dans le navigateur.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232563eb'/><path d='M13 19l6-6M11 15l-2 2a3.5 3.5 0 005 5l2-2M21 17l2-2a3.5 3.5 0 00-5-5l-2 2' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round'/></svg>">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --text: #16181d; --muted: #5d6470;
+    --border: #dfe2e7; --accent: #2563eb; --accent-text: #ffffff;
+    --soft: #eef2ff; --ok: #15803d; --err: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --surface: #181b21; --text: #e8eaee; --muted: #9aa1ad;
+      --border: #2a2f38; --accent: #5b8cff; --accent-text: #0b0d11;
+      --soft: #1d2433; --ok: #4ade80; --err: #f87171;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1115; --surface: #181b21; --text: #e8eaee; --muted: #9aa1ad;
+    --border: #2a2f38; --accent: #5b8cff; --accent-text: #0b0d11;
+    --soft: #1d2433; --ok: #4ade80; --err: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.02em; }
+  header p { margin: 0 0 24px; color: var(--muted); }
+  nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  nav button {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 7px 14px; border-radius: 999px; cursor: pointer; font: inherit;
+  }
+  nav button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .panel[hidden] { display: none; }
+  label { display: block; font-weight: 600; margin: 0 0 6px; font-size: 14px; }
+  textarea, input[type=text] {
+    width: 100%; font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  .btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 7px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 14px;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .btn:hover { filter: brightness(0.97); }
+  .opt { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+  .msg { font-size: 13px; min-height: 1.2em; margin-top: 6px; }
+  .msg.err { color: var(--err); } .msg.ok { color: var(--ok); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; width: 32%; }
+  td code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  .params td input { padding: 6px 8px; }
+  .params .x { width: 34px; }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>URL Convert</h1>
+    <p>Encoder, décoder, analyser et nettoyer des URL. Tout se passe dans votre navigateur, rien n'est envoyé.</p>
+  </header>
+
+  <nav role="tablist">
+    <button role="tab" data-tab="codec" aria-selected="true">Encoder / Décoder</button>
+    <button role="tab" data-tab="parse" aria-selected="false">Analyser</button>
+    <button role="tab" data-tab="clean" aria-selected="false">Nettoyer</button>
+    <button role="tab" data-tab="slug" aria-selected="false">Slug</button>
+    <button role="tab" data-tab="b64" aria-selected="false">Base64 URL</button>
+  </nav>
+
+  <!-- Encode / decode -->
+  <section class="card panel" id="codec">
+    <label for="codec-in">Texte ou URL</label>
+    <textarea id="codec-in" rows="5" placeholder="https://exemple.fr/recherche?q=café crème&amp;page=2"></textarea>
+    <div class="row">
+      <button class="btn primary" data-act="encode">Encoder</button>
+      <button class="btn primary" data-act="decode">Décoder</button>
+      <span class="opt"><input type="checkbox" id="codec-full"> <label for="codec-full" style="margin:0;font-weight:400">URL complète (garde : / ? &amp; =)</label></span>
+      <span class="opt"><input type="checkbox" id="codec-plus"> <label for="codec-plus" style="margin:0;font-weight:400">Espaces en +</label></span>
+    </div>
+    <label for="codec-out">Résultat</label>
+    <textarea id="codec-out" rows="5" readonly></textarea>
+    <div class="row"><button class="btn" data-copy="codec-out">Copier</button><button class="btn" id="codec-swap">↑ Utiliser comme entrée</button></div>
+    <div class="msg" id="codec-msg"></div>
+  </section>
+
+  <!-- Parse -->
+  <section class="card panel" id="parse" hidden>
+    <label for="parse-in">URL à analyser</label>
+    <input type="text" id="parse-in" placeholder="https://user@exemple.fr:8080/chemin/page?a=1&amp;b=deux#ancre">
+    <div class="msg" id="parse-msg"></div>
+    <div id="parse-out" hidden>
+      <h3>Composants</h3>
+      <table id="parse-parts"></table>
+      <h3>Paramètres de requête</h3>
+      <table class="params"><thead><tr><th>Clé</th><th>Valeur (décodée)</th><th class="x"></th></tr></thead><tbody id="parse-params"></tbody></table>
+      <div class="row"><button class="btn" id="parse-add">+ Ajouter un paramètre</button></div>
+      <label for="parse-rebuilt">URL reconstruite</label>
+      <input type="text" id="parse-rebuilt" readonly>
+      <div class="row"><button class="btn" data-copy="parse-rebuilt">Copier</button></div>
+    </div>
+  </section>
+
+  <!-- Clean -->
+  <section class="card panel" id="clean" hidden>
+    <label for="clean-in">URL(s) à nettoyer — une par ligne</label>
+    <textarea id="clean-in" rows="5" placeholder="https://exemple.fr/article?id=42&amp;utm_source=newsletter&amp;fbclid=abc123"></textarea>
+    <p class="hint">Retire les paramètres de suivi : utm_*, fbclid, gclid, msclkid, mc_eid, igshid, _ga, ref, etc.</p>
+    <div class="row"><span class="opt"><input type="checkbox" id="clean-hash"> <label for="clean-hash" style="margin:0;font-weight:400">Retirer aussi l'ancre (#…)</label></span></div>
+    <label for="clean-out">URL(s) propres</label>
+    <textarea id="clean-out" rows="5" readonly></textarea>
+    <div class="row"><button class="btn" data-copy="clean-out">Copier</button></div>
+    <div class="msg" id="clean-msg"></div>
+  </section>
+
+  <!-- Slug -->
+  <section class="card panel" id="slug" hidden>
+    <label for="slug-in">Titre ou texte</label>
+    <input type="text" id="slug-in" placeholder="Les 10 meilleures crêpes de Bretagne !">
+    <div class="row">
+      <span class="opt">Séparateur
+        <select id="slug-sep" class="btn"><option value="-">-</option><option value="_">_</option></select>
+      </span>
+    </div>
+    <label for="slug-out">Slug</label>
+    <input type="text" id="slug-out" readonly>
+    <div class="row"><button class="btn" data-copy="slug-out">Copier</button></div>
+  </section>
+
+  <!-- Base64 URL -->
+  <section class="card panel" id="b64" hidden>
+    <label for="b64-in">Texte</label>
+    <textarea id="b64-in" rows="5" placeholder="Bonjour à tous"></textarea>
+    <div class="row">
+      <button class="btn primary" data-b64="enc">Encoder en Base64URL</button>
+      <button class="btn primary" data-b64="dec">Décoder</button>
+    </div>
+    <label for="b64-out">Résultat</label>
+    <textarea id="b64-out" rows="5" readonly></textarea>
+    <div class="row"><button class="btn" data-copy="b64-out">Copier</button></div>
+    <div class="msg" id="b64-msg"></div>
+  </section>
+
+  <footer>URL Convert · hébergé sur Cloudflare</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const msg = (id, text, kind) => { const el = $(id); el.textContent = text || ""; el.className = "msg" + (kind ? " " + kind : ""); };
+
+// Tabs
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("nav button").forEach((x) => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll(".panel").forEach((p) => p.hidden = p.id !== b.dataset.tab);
+  try { localStorage.setItem("tab", b.dataset.tab); } catch (e) {}
+}));
+try { const t = localStorage.getItem("tab"); if (t) document.querySelector(`nav [data-tab="${t}"]`)?.click(); } catch (e) {}
+
+// Copy
+document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+  const v = $(b.dataset.copy).value; if (!v) return;
+  try { await navigator.clipboard.writeText(v); } catch (e) { $(b.dataset.copy).select(); document.execCommand("copy"); }
+  const old = b.textContent; b.textContent = "Copié ✓"; setTimeout(() => b.textContent = old, 1200);
+}));
+
+// Encode / decode
+document.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+  const input = $("codec-in").value, full = $("codec-full").checked, plus = $("codec-plus").checked;
+  try {
+    let out;
+    if (b.dataset.act === "encode") {
+      out = full ? encodeURI(input) : encodeURIComponent(input);
+      if (plus) out = out.replace(/%20/g, "+");
+    } else {
+      const src = plus ? input.replace(/\+/g, " ") : input;
+      out = full ? decodeURI(src) : decodeURIComponent(src);
+    }
+    $("codec-out").value = out; msg("codec-msg", "");
+  } catch (e) { msg("codec-msg", "Séquence d'encodage invalide (un « % » n'est pas suivi de deux chiffres hexadécimaux valides).", "err"); }
+}));
+$("codec-swap").addEventListener("click", () => { $("codec-in").value = $("codec-out").value; $("codec-out").value = ""; });
+
+// Parse
+let parsed = null;
+const withScheme = (s) => /^([a-z][a-z0-9+.-]*:\/\/|(mailto|tel|data|urn|blob):)/i.test(s) ? s : "https://" + s;
+function renderParse() {
+  const raw = $("parse-in").value.trim();
+  if (!raw) { $("parse-out").hidden = true; msg("parse-msg", ""); return; }
+  try { parsed = new URL(withScheme(raw)); } catch (e) { $("parse-out").hidden = true; msg("parse-msg", "URL invalide.", "err"); return; }
+  msg("parse-msg", "");
+  const rows = [["Protocole", parsed.protocol], ["Utilisateur", parsed.username], ["Hôte", parsed.hostname], ["Port", parsed.port],
+    ["Chemin", parsed.pathname], ["Chemin décodé", safeDecode(parsed.pathname)], ["Requête", parsed.search], ["Ancre", parsed.hash], ["Origine", parsed.origin]];
+  $("parse-parts").innerHTML = "";
+  rows.filter(([, v]) => v).forEach(([k, v]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<th></th><td><code></code></td>";
+    tr.firstChild.textContent = k; tr.querySelector("code").textContent = v;
+    $("parse-parts").appendChild(tr);
+  });
+  $("parse-params").innerHTML = "";
+  for (const [k, v] of parsed.searchParams) addParamRow(k, v);
+  $("parse-out").hidden = false;
+  rebuild();
+}
+function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+function addParamRow(k = "", v = "") {
+  const tr = document.createElement("tr");
+  tr.innerHTML = '<td><input type="text"></td><td><input type="text"></td><td class="x"><button class="btn" title="Supprimer">×</button></td>';
+  const [ki, vi] = tr.querySelectorAll("input"); ki.value = k; vi.value = v;
+  ki.addEventListener("input", rebuild); vi.addEventListener("input", rebuild);
+  tr.querySelector("button").addEventListener("click", () => { tr.remove(); rebuild(); });
+  $("parse-params").appendChild(tr);
+}
+function rebuild() {
+  if (!parsed) return;
+  const u = new URL(parsed.href); u.search = "";
+  $("parse-params").querySelectorAll("tr").forEach((tr) => {
+    const [ki, vi] = tr.querySelectorAll("input"); if (ki.value) u.searchParams.append(ki.value, vi.value);
+  });
+  $("parse-rebuilt").value = u.href;
+}
+$("parse-in").addEventListener("input", renderParse);
+$("parse-add").addEventListener("click", () => { addParamRow(); rebuild(); });
+
+// Clean
+const TRACKERS = [/^utm_/i, /^fbclid$/i, /^gclid$/i, /^gclsrc$/i, /^dclid$/i, /^gbraid$/i, /^wbraid$/i, /^msclkid$/i, /^mc_(eid|cid)$/i,
+  /^igshid$/i, /^_ga$/i, /^_gl$/i, /^yclid$/i, /^twclid$/i, /^ttclid$/i, /^li_fat_id$/i, /^mkt_tok$/i, /^vero_(id|conv)$/i,
+  /^_hsenc$/i, /^_hsmi$/i, /^__hs[a-z_]*$/i, /^hsCtaTracking$/i, /^oly_(anon|enc)_id$/i, /^ref(_src|_url)?$/i, /^si$/i, /^spm$/i];
+function cleanAll() {
+  const lines = $("clean-in").value.split("\n"); let removed = 0, bad = 0;
+  const out = lines.map((line) => {
+    const s = line.trim(); if (!s) return "";
+    let u; try { u = new URL(withScheme(s)); } catch (e) { bad++; return s; }
+    for (const k of [...u.searchParams.keys()]) if (TRACKERS.some((r) => r.test(k))) { u.searchParams.delete(k); removed++; }
+    if ($("clean-hash").checked) u.hash = "";
+    return u.href.replace(/\?$/, "");
+  });
+  $("clean-out").value = out.join("\n");
+  if (!$("clean-in").value.trim()) return msg("clean-msg", "");
+  msg("clean-msg", `${removed} paramètre(s) de suivi retiré(s)` + (bad ? ` · ${bad} ligne(s) non reconnue(s) laissée(s) telles quelles` : ""), bad ? "err" : "ok");
+}
+$("clean-in").addEventListener("input", cleanAll); $("clean-hash").addEventListener("change", cleanAll);
+
+// Slug
+function slugify() {
+  const sep = $("slug-sep").value;
+  $("slug-out").value = $("slug-in").value.normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/œ/gi, "oe").replace(/æ/gi, "ae").replace(/ß/g, "ss").toLowerCase()
+    .replace(/[^a-z0-9]+/g, sep).replace(new RegExp(`^\\${sep}+|\\${sep}+$`, "g"), "");
+}
+$("slug-in").addEventListener("input", slugify); $("slug-sep").addEventListener("change", slugify);
+
+// Base64URL (UTF-8 safe)
+document.querySelectorAll("[data-b64]").forEach((b) => b.addEventListener("click", () => {
+  const input = $("b64-in").value;
+  try {
+    if (b.dataset.b64 === "enc") {
+      const bytes = new TextEncoder().encode(input); let bin = "";
+      bytes.forEach((x) => bin += String.fromCharCode(x));
+      $("b64-out").value = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    } else {
+      let s = input.trim().replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+      const bin = atob(s); const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      $("b64-out").value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    }
+    msg("b64-msg", "");
+  } catch (e) { msg("b64-msg", "Entrée Base64 invalide.", "err"); }
+}));
+</script>
+</body>
+</html>
